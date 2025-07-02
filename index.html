@@ -1,76 +1,93 @@
 <!DOCTYPE html>
-
-<html lang="en">
+<html lang="ko">
 
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>SSSS</title>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>스파르타플릭스 - 기능완성</title>
     <script src="https://ajax.googleapis.com/ajax/libs/jquery/3.5.1/jquery.min.js"></script>
-    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.0.2/dist/css/bootstrap.min.css" rel="stylesheet"
-        integrity="sha384-EVSTQN3/azprG1Anm3QDgpJLIm9Nao0Yz1ztcQTwFspd3yD65VohhpuuCOmLASjC" crossorigin="anonymous">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.0.2/dist/css/bootstrap.min.css" rel="stylesheet" />
     <style>
-        @import url('https://fonts.googleapis.com/css2?family=Nanum+Myeongjo&display=swap');
-
-        * {
-            font-family: "Nanum Myeongjo", serif;
-            font-weight: 400;
-            font-style: normal;
-        }
-
-        .main {
-            color: white;
-
-            background-image: url('https://occ-0-1123-1217.1.nflxso.net/dnm/api/v6/6AYY37jfdO6hpXcMjf9Yu5cnmO0/AAAABeIfo7VL_VDyKnljV66IkR-4XLb6xpZqhpLSo3JUtbivnEW4s60PD27muH1mdaANM_8rGpgbm6L2oDgA_iELHZLZ2IQjG5lvp5d2.jpg?r=e6e.jpg');
-            background-position: center;
-            background-size: cover;
-        }
-
         body {
             background-color: black;
-        }
-
-        .mycards {
-            width: 1200px;
-            margin: 20px auto 20px auto;
+            font-family: "Nanum Myeongjo", serif;
+            color: white;
         }
 
         .mypostingbox {
             width: 500px;
-            margin: 20px auto 20px auto;
-
+            margin: 20px auto;
             border: 1px solid white;
             padding: 20px;
             border-radius: 5px;
+            background-color: #222;
         }
 
-        .form-floating>input {
+        .form-floating>input,
+        .form-floating>label,
+        .form-floating>select {
             background-color: transparent;
             color: white;
         }
 
-        .form-floating>label {
-            color: white;
+        .mycards {
+            width: 1200px;
+            margin: 20px auto;
         }
 
-        .input-group>label {
-            background-color: transparent;
-            color: white;
+        .comment {
+            background-color: #333;
+            margin-left: 20px;
+            padding: 5px 10px;
+            border-radius: 5px;
+            margin-top: 5px;
+            font-size: 14px;
         }
 
-        .mypostingbox>button {
-            width: 100px;
+        .comment .reply-btn,
+        .comment .delete-comment-btn {
+            cursor: pointer;
+            color: #0d6efd;
+            font-size: 0.9rem;
+            margin-left: 10px;
+        }
+
+        .comment .delete-comment-btn {
+            color: #dc3545;
+        }
+
+        .comment-input,
+        .reply-textarea {
+            background-color: #222;
+            color: white;
+            border: 1px solid #444;
+            width: 100%;
+            resize: vertical;
+        }
+
+        .like-btn,
+        .dislike-btn {
+            cursor: pointer;
+            user-select: none;
         }
     </style>
     <script type="module">
-        // Firebase SDK 라이브러리 가져오기
         import { initializeApp } from "https://www.gstatic.com/firebasejs/9.22.0/firebase-app.js";
-        import { getFirestore } from "https://www.gstatic.com/firebasejs/9.22.0/firebase-firestore.js";
-        import { collection, addDoc } from "https://www.gstatic.com/firebasejs/9.22.0/firebase-firestore.js";
-        import { getDocs } from "https://www.gstatic.com/firebasejs/9.22.0/firebase-firestore.js";
+        import {
+            getFirestore,
+            collection,
+            addDoc,
+            getDocs,
+            updateDoc,
+            deleteDoc,
+            doc,
+            query,
+            where,
+            orderBy,
+            serverTimestamp,
+            runTransaction
+        } from "https://www.gstatic.com/firebasejs/9.22.0/firebase-firestore.js";
 
-
-        // For Firebase JS SDK v7.20.0 and later, measurementId is optional
         const firebaseConfig = {
             apiKey: "AIzaSyAq1RQ-m7-KrkkvzAUpT0dpOXMTr2ueLmc",
             authDomain: "sparta-c3b63.firebaseapp.com",
@@ -81,133 +98,448 @@
             measurementId: "G-VRFCKQZZDS"
         };
 
-
-        // Firebase 인스턴스 초기화
         const app = initializeApp(firebaseConfig);
         const db = getFirestore(app);
+        let editingId = null;
+        let moviesData = [];
 
-        $("#postingbtn").click(async function () {
-            let image = $('#image').val();
-            let title = $('#title').val();
-            let star = $('#star').val();
-            let comment = $('#comment').val();
+        // DOM jQuery 변수
+        const $cardsContainer = $('#card');
+        const $postingBox = $('#postingbox');
+        const $btnPosting = $('#postingbtn');
+        const $btnSave = $('#savebtn');
 
-            let doc = {
-                'image': image,
-                'title': title,
-                'star': star,
-                'comment': comment,
+        const $inputImage = $('#image');
+        const $inputTitle = $('#title');
+        const $inputStar = $('#star');
+        const $inputComment = $('#comment');
+
+        // 검색, 필터, 정렬 UI (추가)
+        $('body').prepend(`
+      <div class="container my-3 text-white">
+        <input type="text" id="searchInput" placeholder="검색어 입력" class="form-control mb-2" />
+        <select id="filterStar" class="form-select mb-2">
+          <option value="all">전체 별점</option>
+          <option value="5">⭐⭐⭐⭐⭐만</option>
+          <option value="4">⭐⭐⭐⭐ 이상</option>
+          <option value="3">⭐⭐⭐ 이상</option>
+        </select>
+        <select id="sortSelect" class="form-select mb-3">
+          <option value="latest">최신순</option>
+          <option value="star">별점순</option>
+          <option value="likes">좋아요순</option>
+        </select>
+      </div>
+    `);
+
+        const $searchInput = $('#searchInput');
+        const $filterStar = $('#filterStar');
+        const $sortSelect = $('#sortSelect');
+
+        // 저장 or 수정 버튼 클릭
+        $btnPosting.on('click', async () => {
+            const image = $inputImage.val().trim();
+            const title = $inputTitle.val().trim();
+            const star = $inputStar.val();
+            const comment = $inputComment.val().trim();
+
+            if (!image || !title || !star || star === '별점선택') {
+                alert('이미지, 제목, 별점은 필수 입력입니다.');
+                return;
+            }
+
+            const docData = {
+                image,
+                title,
+                star,
+                comment,
+                likes: 0,
+                dislikes: 0,
+                createdAt: serverTimestamp()
             };
 
-            await addDoc(collection(db, "movies"), doc);
-            alert('저장완료!')
-            window.location.reload();
-        })
-
-        let url = "http://spartacodingclub.shop/sparta_api/weather/seoul";
-        fetch(url).then(res => res.json()).then(data => {
-            let temp = data['temp'];
-            if (temp > 20) {
-                $('#msg').text('더워요');
+            if (editingId) {
+                // 수정
+                await updateDoc(doc(db, "movies", editingId), docData);
+                alert("수정 완료!");
+                editingId = null;
             } else {
-                $('#msg').text('더워요');
+                // 새로 저장
+                await addDoc(collection(db, "movies"), docData);
+                alert("저장 완료!");
             }
-        })
 
-        let docs = await getDocs(collection(db, "movies"));
-        docs.forEach((doc) => {
-            let row = doc.data();
-            let image = row['image'];
-            let title = row['title'];
-            let comment = row['comment'];
-            let star = row['star'];
-
-            let temp_html = `
-            <div class="col">
-                <div class="card h-100">
-                    <img src="${image}"
-                        class="card-img-top" alt="...">
-                    <div class="card-body">
-                        <h5 class="card-title">${title}</h5>
-                        <p class="card-text">${star}</p>
-                        <p class="card-text">${comment}</p>
-                    </div>
-                </div>
-            </div>`;
-            $('#card').append(temp_html);
+            clearForm();
+            $postingBox.hide();
+            await loadMovies();
         });
 
-        $("#savebtn").click(async function () {
-            $('#postingbox').toggle();
-        })
+        // 폼 초기화 함수
+        function clearForm() {
+            $inputImage.val('');
+            $inputTitle.val('');
+            $inputStar.val('별점선택');
+            $inputComment.val('');
+            editingId = null;
+        }
+
+        // 저장폼 토글
+        $btnSave.on('click', () => {
+            if ($postingBox.is(':visible')) {
+                $postingBox.hide();
+                clearForm();
+            } else {
+                $postingBox.show();
+            }
+        });
+
+        // 영화 전체 불러오기
+        async function loadMovies() {
+            $cardsContainer.empty();
+            const snapshot = await getDocs(collection(db, "movies"));
+            moviesData = [];
+            snapshot.forEach(docSnap => {
+                moviesData.push({ id: docSnap.id, ...docSnap.data() });
+            });
+            applyFiltersAndRender();
+        }
+
+        // 검색, 필터, 정렬 적용 후 렌더링
+        function applyFiltersAndRender() {
+            let filtered = [...moviesData];
+
+            // 검색
+            const keyword = $searchInput.val().toLowerCase();
+            if (keyword) {
+                filtered = filtered.filter(m =>
+                    m.title.toLowerCase().includes(keyword) || m.comment.toLowerCase().includes(keyword)
+                );
+            }
+
+            // 필터 (별점)
+            const filterVal = $filterStar.val();
+            if (filterVal !== 'all') {
+                const minStar = parseInt(filterVal);
+                filtered = filtered.filter(m => (m.star.match(/⭐/g) || []).length >= minStar);
+            }
+
+            // 정렬
+            const sortVal = $sortSelect.val();
+            if (sortVal === 'latest') {
+                filtered.sort((a, b) => (a.createdAt?.seconds || 0) < (b.createdAt?.seconds || 0) ? 1 : -1);
+            } else if (sortVal === 'star') {
+                filtered.sort((a, b) => (b.star.match(/⭐/g) || []).length - (a.star.match(/⭐/g) || []).length);
+            } else if (sortVal === 'likes') {
+                filtered.sort((a, b) => (b.likes || 0) - (a.likes || 0));
+            }
+
+            renderCards(filtered);
+        }
+
+        // 카드 렌더 함수
+        function renderCards(list) {
+            $cardsContainer.empty();
+            if (list.length === 0) {
+                $cardsContainer.append('<p class="text-white text-center">검색 결과가 없습니다.</p>');
+                return;
+            }
+
+            list.forEach(movie => {
+                const card = $(`
+          <div class="col" data-id="${movie.id}">
+            <div class="card h-100 bg-dark text-white">
+              <img src="${movie.image}" class="card-img-top" alt="${movie.title}" style="height:200px; object-fit:cover;">
+              <div class="card-body d-flex flex-column justify-content-between">
+                <div>
+                  <h5 class="card-title">${movie.title}</h5>
+                  <p>별점: ${movie.star}</p>
+                  <p>${movie.comment}</p>
+                </div>
+                <div class="d-flex justify-content-between align-items-center mt-3">
+                  <div>
+                    <button class="btn btn-sm btn-outline-success like-btn">👍 <span class="like-count">${movie.likes || 0}</span></button>
+                    <button class="btn btn-sm btn-outline-danger dislike-btn ms-2">👎 <span class="dislike-count">${movie.dislikes || 0}</span></button>
+                  </div>
+                  <div>
+                    <button class="btn btn-sm btn-primary edit-btn">수정</button>
+                    <button class="btn btn-sm btn-danger ms-2 delete-btn">삭제</button>
+                    <button class="btn btn-sm btn-secondary ms-2 comment-toggle-btn">💬 댓글</button>
+                  </div>
+                </div>
+                <div class="comment-section mt-3" style="display:none;">
+                  <textarea class="form-control comment-input mb-2" placeholder="댓글을 입력하세요"></textarea>
+                  <button class="btn btn-sm btn-success add-comment-btn mb-2">댓글 등록</button>
+                  <div class="comment-list"></div>
+                </div>
+              </div>
+            </div>
+          </div>
+        `);
+                $cardsContainer.append(card);
+                loadComments(movie.id, card.find('.comment-list'));
+            });
+        }
+
+        // 댓글 불러오기 (재귀적 대댓글 지원)
+        async function loadComments(movieId, $commentList, parentId = null) {
+            $commentList.empty();
+            const commentsRef = collection(db, "movies", movieId, "comments");
+            let q;
+            if (parentId === null) {
+                q = query(commentsRef, where("parentId", "==", null), orderBy("createdAt", "asc"));
+            } else {
+                q = query(commentsRef, where("parentId", "==", parentId), orderBy("createdAt", "asc"));
+            }
+            const snapshot = await getDocs(q);
+            if (snapshot.empty) return;
+
+            snapshot.forEach(docSnap => {
+                const c = docSnap.data();
+                const cId = docSnap.id;
+
+                const commentHtml = $(`
+          <div class="comment" data-comment-id="${cId}">
+            <p>${c.text}</p>
+            <div>
+              <button class="btn btn-sm btn-outline-success like-comment-btn">👍 <span class="like-count">${c.likes || 0}</span></button>
+              <button class="btn btn-sm btn-outline-danger dislike-comment-btn ms-1">👎 <span class="dislike-count">${c.dislikes || 0}</span></button>
+              <span class="reply-btn ms-3">답글</span>
+              <span class="delete-comment-btn ms-3 text-danger" style="cursor:pointer;">삭제</span>
+            </div>
+            <div class="reply-input mt-2" style="display:none;">
+              <textarea class="form-control reply-textarea mb-2" rows="2" placeholder="답글 입력..."></textarea>
+              <button class="btn btn-sm btn-primary add-reply-btn">등록</button>
+              <button class="btn btn-sm btn-secondary cancel-reply-btn ms-2">취소</button>
+            </div>
+            <div class="child-comments"></div>
+          </div>
+        `);
+
+                $commentList.append(commentHtml);
+
+                // 재귀로 대댓글 표시
+                loadComments(movieId, commentHtml.find('.child-comments'), cId);
+            });
+        }
+
+        // 댓글 추가 (최상위 or 대댓글)
+        async function addComment(movieId, text, parentId = null) {
+            if (!text.trim()) {
+                alert("댓글 내용을 입력해주세요.");
+                return;
+            }
+            const commentsRef = collection(db, "movies", movieId, "comments");
+            await addDoc(commentsRef, {
+                text,
+                parentId,
+                likes: 0,
+                dislikes: 0,
+                createdAt: serverTimestamp()
+            });
+            await loadMovies();
+        }
+
+        // 좋아요/싫어요 영화 반영
+        async function updateMovieLikes(movieId, isLike) {
+            const movieRef = doc(db, "movies", movieId);
+            await runTransaction(db, async (transaction) => {
+                const docSnap = await transaction.get(movieRef);
+                if (!docSnap.exists()) return;
+                const currentLikes = docSnap.data().likes || 0;
+                const currentDislikes = docSnap.data().dislikes || 0;
+                if (isLike) {
+                    transaction.update(movieRef, { likes: currentLikes + 1 });
+                } else {
+                    transaction.update(movieRef, { dislikes: currentDislikes + 1 });
+                }
+            });
+            await loadMovies();
+        }
+
+        // 좋아요/싫어요 댓글 반영
+        async function updateCommentLikes(movieId, commentId, isLike) {
+            const commentRef = doc(db, "movies", movieId, "comments", commentId);
+            await runTransaction(db, async (transaction) => {
+                const docSnap = await transaction.get(commentRef);
+                if (!docSnap.exists()) return;
+                const currentLikes = docSnap.data().likes || 0;
+                const currentDislikes = docSnap.data().dislikes || 0;
+                if (isLike) {
+                    transaction.update(commentRef, { likes: currentLikes + 1 });
+                } else {
+                    transaction.update(commentRef, { dislikes: currentDislikes + 1 });
+                }
+            });
+            await loadMovies();
+        }
+
+        // 삭제 (영화)
+        async function deleteMovie(movieId) {
+            if (!confirm("정말 삭제할까요?")) return;
+            await deleteDoc(doc(db, "movies", movieId));
+            await loadMovies();
+        }
+
+        // 삭제 (댓글)
+        async function deleteComment(movieId, commentId) {
+            if (!confirm("댓글을 삭제할까요?")) return;
+            await deleteDoc(doc(db, "movies", movieId, "comments", commentId));
+            await loadMovies();
+        }
+
+        // 이벤트 바인딩
+
+        // 좋아요/싫어요 (영화)
+        $(document).on('click', '.like-btn', async function () {
+            const movieId = $(this).closest('.col').data('id');
+            await updateMovieLikes(movieId, true);
+        });
+
+        $(document).on('click', '.dislike-btn', async function () {
+            const movieId = $(this).closest('.col').data('id');
+            await updateMovieLikes(movieId, false);
+        });
+
+        // 좋아요/싫어요 (댓글)
+        $(document).on('click', '.like-comment-btn', async function () {
+            const $commentDiv = $(this).closest('.comment');
+            const commentId = $commentDiv.data('comment-id');
+            const movieId = $(this).closest('.col').data('id');
+            await updateCommentLikes(movieId, commentId, true);
+        });
+
+        $(document).on('click', '.dislike-comment-btn', async function () {
+            const $commentDiv = $(this).closest('.comment');
+            const commentId = $commentDiv.data('comment-id');
+            const movieId = $(this).closest('.col').data('id');
+            await updateCommentLikes(movieId, commentId, false);
+        });
+
+        // 삭제 (영화)
+        $(document).on('click', '.delete-btn', async function () {
+            const movieId = $(this).closest('.col').data('id');
+            await deleteMovie(movieId);
+        });
+
+        // 삭제 (댓글)
+        $(document).on('click', '.delete-comment-btn', async function () {
+            const $commentDiv = $(this).closest('.comment');
+            const commentId = $commentDiv.data('comment-id');
+            const movieId = $(this).closest('.col').data('id');
+            await deleteComment(movieId, commentId);
+        });
+
+        // 수정 (영화)
+        $(document).on('click', '.edit-btn', function () {
+            const card = $(this).closest('.col');
+            const docId = card.data('id');
+            const image = card.find('img').attr('src');
+            const title = card.find('.card-title').text();
+            const star = card.find('p').eq(0).text().replace("별점: ", "");
+            const comment = card.find('p').eq(1).text();
+
+            $inputImage.val(image);
+            $inputTitle.val(title);
+            $inputStar.val(star);
+            $inputComment.val(comment);
+            editingId = docId;
+            $postingBox.show();
+        });
+
+        // 댓글 토글
+        $(document).on('click', '.comment-toggle-btn', function () {
+            const $section = $(this).closest('.card-body').find('.comment-section');
+            $section.toggle();
+        });
+
+        // 댓글 등록 (최상위)
+        $(document).on('click', '.add-comment-btn', async function () {
+            const $card = $(this).closest('.card');
+            const movieId = $card.closest('.col').data('id');
+            const $textarea = $(this).siblings('.comment-input');
+            const text = $textarea.val();
+            await addComment(movieId, text);
+            $textarea.val('');
+        });
+
+        // 답글 버튼 클릭
+        $(document).on('click', '.reply-btn', function () {
+            const $comment = $(this).closest('.comment');
+            $comment.find('.reply-input').show();
+        });
+
+        // 답글 등록
+        $(document).on('click', '.add-reply-btn', async function () {
+            const $replyInput = $(this).closest('.reply-input');
+            const text = $replyInput.find('.reply-textarea').val();
+            if (!text.trim()) {
+                alert("답글 내용을 입력하세요.");
+                return;
+            }
+            const $comment = $(this).closest('.comment');
+            const commentId = $comment.data('comment-id');
+            const movieId = $(this).closest('.col').data('id');
+            await addComment(movieId, text, commentId);
+            $replyInput.hide();
+            $replyInput.find('.reply-textarea').val('');
+        });
+
+        // 답글 취소
+        $(document).on('click', '.cancel-reply-btn', function () {
+            const $replyInput = $(this).closest('.reply-input');
+            $replyInput.hide();
+            $replyInput.find('.reply-textarea').val('');
+        });
+
+        // 검색, 필터, 정렬 이벤트
+        $searchInput.on('input', applyFiltersAndRender);
+        $filterStar.on('change', applyFiltersAndRender);
+        $sortSelect.on('change', applyFiltersAndRender);
+
+        // 초기 로딩
+        $(async () => {
+            await loadMovies();
+        });
+
     </script>
 </head>
 
 <body>
-    <header class="p-3 text-bg-dark">
-        <div class="container">
-            <div class="d-flex flex-wrap align-items-center justify-content-center justify-content-lg-start"> <a
-                    href="/" class="d-flex align-items-center mb-2 mb-lg-0 text-white text-decoration-none"> <svg
-                        class="bi me-2" width="40" height="32" role="img" aria-label="Bootstrap">
-                        <use xlink:href="#bootstrap"></use>
-                    </svg>
-                </a>
-                <ul class="nav col-12 col-lg-auto me-lg-auto mb-2 justify-content-center mb-md-0">
-                    <li><a href="#" class="nav-link px-2 text-danger">spartaflix</a></li>
-                    <li><a href="#" class="nav-link px-2 text-white">홈</a></li>
-                    <li><a href="#" class="nav-link px-2 text-white">시리즈</a></li>
-                    <li><a href="#" class="nav-link px-2 text-white">영화</a></li>
-                    <li><a href="#" class="nav-link px-2 text-white">내가 찜한 콘텐츠</a></li>
-                    <li><a href="#" class="nav-link px-2 text-white">현재 기온 : <span id="msg"></span></a></li>
-                </ul>
-                <form class="col-12 col-lg-auto mb-3 mb-lg-0 me-lg-3" role="search"> <input type="search"
-                        class="form-control form-control-dark text-bg-dark" placeholder="Search..." aria-label="Search">
-                </form>
-                <div class="text-end"> <button type="button" class="btn btn-outline-light me-2">Login</button> <button
-                        type="button" class="btn btn-danger">Sign-up</button> </div>
-            </div>
-        </div>
-    </header>
-    <div class="main">
-        <div class="p-5 mb-4 bg-body-tertiary rounded-3">
-            <div class="container-fluid py-5">
-                <h1 class="display-5 fw-bold">킹덤2</h1>
-                <p class="col-md-8 fs-4">병든 왕을 둘러싸고 흉흉한 소문이 떠돈다. 어둠에 뒤덮인 조선, 기이한 역병에 신음하는 산하. 정체 모를 악에 맞서 백성을 구원할 희망은 오직
-                    세자뿐이다.</p>
-                <button id="savebtn" type="button" class="btn btn-outline-light">영화 기록하기</button>
-                <button type="button" class="btn btn-outline-light">상세정보</button>
-            </div>
-        </div>
-    </div>
-    <div class="mypostingbox" id="postingbox">
-        <div class="form-floating mb-3">
-            <input type="email" class="form-control" id="image" placeholder="영화 이미지 주소">
-            <label for="floatingInput">영화 이미지 주소</label>
-        </div>
-        <div class="form-floating mb-3">
-            <input type="email" class="form-control" id="title" placeholder="영화 제목">
-            <label for="floatingInput">영화 제목</label>
-        </div>
-        <div class="input-group mb-3">
-            <label class="input-group-text" for="inputGroupSelect01">별점</label>
-            <select class="form-select" id="star">
-                <option selected>별점선택</option>
-                <option value="⭐">⭐</option>
-                <option value="⭐⭐">⭐⭐</option>
-                <option value="⭐⭐⭐">⭐⭐⭐</option>
-                <option value="⭐⭐⭐⭐">⭐⭐⭐⭐</option>
-                <option value="⭐⭐⭐⭐⭐">⭐⭐⭐⭐⭐</option>
-            </select>
-        </div>
-        <div class="form-floating mb-3">
-            <input type="email" class="form-control" id="comment" placeholder="추천 이유">
-            <label for="floatingInput">추천 이유</label>
-        </div>
-        <button id="postingbtn" type="button" class="btn btn-danger">기록하기</button>
-    </div>
+    <div class="container mt-5">
+        <h1 class="text-white">사진저장소</h1>
+        <button id="savebtn" class="btn btn-light mb-3">사진 기록하기</button>
 
-    <div class="mycards">
-        <div id="card" class="row row-cols-1 row-cols-md-4 g-4">
+        <div class="mypostingbox" id="postingbox" style="display: none;">
+            <div class="form-floating mb-3">
+                <input type="text" class="form-control" id="image" placeholder="영화 이미지 주소" />
+                <label for="image">이미지 주소</label>
+            </div>
+            <div class="form-floating mb-3">
+                <input type="text" class="form-control" id="title" placeholder="영화 제목" />
+                <label for="title">사진 제목</label>
+            </div>
+            <div class="form-floating mb-3">
+                <select class="form-select" id="star">
+                    <option selected>별점선택</option>
+                    <option value="⭐">⭐</option>
+                    <option value="⭐⭐">⭐⭐</option>
+                    <option value="⭐⭐⭐">⭐⭐⭐</option>
+                    <option value="⭐⭐⭐⭐">⭐⭐⭐⭐</option>
+                    <option value="⭐⭐⭐⭐⭐">⭐⭐⭐⭐⭐</option>
+                </select>
+                <label for="star">별점</label>
+            </div>
+            <div class="form-floating mb-3">
+                <input type="text" class="form-control" id="comment" placeholder="추천 이유" />
+                <label for="comment">추천 이유</label>
+            </div>
+            <button id="postingbtn" type="button" class="btn btn-danger">기록하기</button>
+        </div>
+
+        <div class="mycards">
+            <div id="card" class="row row-cols-1 row-cols-md-4 g-4"></div>
+        </div>
+    </div>
 </body>
 
 </html>
